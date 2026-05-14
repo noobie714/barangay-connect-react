@@ -1,0 +1,14 @@
+# Simple .htaccess for API
+Options -Indexes
+RewriteEngine On
+
+# CORS headers (Apache handles these for all requests including preflight)
+Header always set Access-Control-Allow-Origin "https://barangay-connect-react.vercel.app"
+Header always set Access-Control-Allow-Credentials "true"
+Header always set Access-Control-Allow-Headers "Content-Type, Accept, Authorization, X-Requested-With"
+Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+
+# Route to index.php if file doesn't exist directly
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.php [QSA,L]

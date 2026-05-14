@@ -1,0 +1,17 @@
+FROM php:8.3-apache
+
+RUN docker-php-ext-install mysqli pdo pdo_mysql
+RUN a2enmod rewrite headers
+
+COPY . /var/www/html/
+
+RUN chown -R www-data:www-data /var/www/html \
+    && chmod -R 755 /var/www/html \
+    && sed -i 's/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf
+
+# Make sure headers module is active in the config
+RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
+
+WORKDIR /var/www/html/
+EXPOSE 80
+CMD ["apache2-foreground"]
