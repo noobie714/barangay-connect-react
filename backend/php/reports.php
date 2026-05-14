@@ -6,6 +6,14 @@
 // Load central configuration
 require_once __DIR__ . '/config.php';
 
+// Start session (if needed)
+if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.cookie_samesite', 'None');
+    ini_set('session.cookie_secure', '1');
+    ini_set('session.cookie_httponly', '1');
+    session_start();
+}
+
 // Start session
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
