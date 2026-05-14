@@ -60,32 +60,32 @@ function handleLogin(array $d): void {
     $pass  = $d['password'] ?? '';
 
     if (!$email || !$pass) jsonError('Email and password are required.');
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) jsonError('Invalid email address.');
 
     $pdo  = getDB();
     $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ? AND is_active = 1 LIMIT 1");
     $stmt->execute([$email]);
     $user = $stmt->fetch();
 
-    if (!$user || !password_verify($pass, $user['password_hash'])) {
+    if (!$user || !password_verify($pass, $user['password_hash']))
         jsonError('Invalid email or password.', 401);
-    }
+
+    // Generate a simple token and store in DB
+    $token = bin2hex(random_bytes(32));
+    $pdo->prepare("UPDATE users SET auth_token = ? WHERE id = ?")
+        ->execute([$token, $user['id']]);
 
     $userData = [
         'id'         => $user['id'],
         'email'      => $user['email'],
         'first_name' => $user['first_name'],
         'last_name'  => $user['last_name'],
-        'name'       => $user['first_name'] . ' ' . $user['last_name'],
         'role'       => $user['role'],
         'phone'      => $user['phone'],
         'purok'      => $user['purok'],
-        'address'    => $user['address'],
+        'token'      => $token,
     ];
 
-    $_SESSION['user'] = $userData;
-    echo json_encode(['success' => true, 'message' => 'Login successful.', 'user' => $userData]);
-    exit;
+    jsonOk(['user' => $userData], 'Login successful.');
 }
 
 // ── REGISTER ──────────────────────────────────────────────
@@ -127,16 +127,44 @@ function handleRegister(array $d): void {
 
 // ── LOGOUT ────────────────────────────────────────────────
 function handleLogout(): void {
-    $_SESSION = [];
-    session_destroy();
-    echo json_encode(['success' => true, 'message' => 'Logged out.']);
-    exit;
+    $token = getBearerToken();
+    if ($token) {
+        $pdo = getDB();
+        $pdo->prepare("UPDATE users SET auth_token = NULL WHERE auth_token = ?")
+            ->execute([$token]);
+    }
+    jsonOk([], 'Logged out.');
 }
 
 // ── ME ────────────────────────────────────────────────────
 function handleMe(): void {
-    $user = $_SESSION['user'] ?? null;
+    $token = getBearerToken();
+    if (!$token) jsonError('Not authenticated.', 401);
+
+    $pdo  = getDB();
+    $stmt = $pdo->prepare("SELECT * FROM users WHERE auth_token = ? AND is_active = 1 LIMIT 1");
+    $stmt->execute([$token]);
+    $user = $stmt->fetch();
+
     if (!$user) jsonError('Not authenticated.', 401);
-    echo json_encode(['success' => true, 'user' => $user]);
-    exit;
+
+    jsonOk(['user' => [
+        'id'         => $user['id'],
+        'email'      => $user['email'],
+        'first_name' => $user['first_name'],
+        'last_name'  => $user['last_name'],
+        'role'       => $user['role'],
+        'phone'      => $user['phone'],
+        'purok'      => $user['purok'],
+        'token'      => $user['auth_token'],
+    ]]);
+}
+
+function getBearerToken(): ?string {
+    $headers = getallheaders();
+    $auth = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+    if (str_starts_with($auth, 'Bearer ')) {
+        return substr($auth, 7);
+    }
+    return null;
 }

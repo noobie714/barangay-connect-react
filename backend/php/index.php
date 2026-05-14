@@ -1,5 +1,7 @@
 <?php
-// Simple router — redirects API calls to the right file
-header("Content-Type: application/json");
-http_response_code(200);
-echo json_encode(["status" => "Barangay Connect API is running"]);
+require_once __DIR__ . '/config.php';
+
+$pdo = getDB();
+$pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_token VARCHAR(64) NULL DEFAULT NULL");
+
+echo json_encode(['done' => true]);
