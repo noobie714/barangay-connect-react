@@ -1,14 +1,14 @@
 -- ============================================================
 --  BarangayConnect - MySQL Database Schema
---  Database: if0_41886132_barangay
+--  Database: barangay_connect
 --  Version:  1.1  (includes gcash_number, maya_number)
 -- ============================================================
 
-CREATE DATABASE IF NOT EXISTS if0_41886132_barangay
+CREATE DATABASE IF NOT EXISTS barangay_connect
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
 
-USE if0_41886132_barangay;
+USE barangay_connect;
 
 -- ============================================================
 -- TABLE: users
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS document_types (
     id              INT UNSIGNED     AUTO_INCREMENT PRIMARY KEY,
     name            VARCHAR(120)     NOT NULL,
-    icon            VARCHAR(30)      NOT NULL DEFAULT '',
+    icon            VARCHAR(10)      NOT NULL DEFAULT '📄',
     fee             DECIMAL(10,2)    NOT NULL DEFAULT 0.00,
     processing_days TINYINT UNSIGNED NOT NULL DEFAULT 1,
     description     VARCHAR(255)     DEFAULT NULL,
@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     user_id    INT UNSIGNED  NOT NULL,
     title      VARCHAR(180)  NOT NULL,
     message    TEXT          NOT NULL,
-    icon       VARCHAR(30)   DEFAULT '',
+    icon       VARCHAR(10)   DEFAULT '🔔',
     is_read    TINYINT(1)    NOT NULL DEFAULT 0,
     created_at TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
