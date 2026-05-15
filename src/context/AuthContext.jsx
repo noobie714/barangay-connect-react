@@ -15,16 +15,12 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false));
   }, []);
 
-const login = (userData) => {
-    if (userData.token) localStorage.setItem('auth_token', userData.token);
-    setUser(userData);
-};
+  const login = (userData) => setUser(userData);
 
-const logout = async () => {
+  const logout = async () => {
     await GET('auth', 'logout');
-    localStorage.removeItem('auth_token');
     setUser(null);
-};
+  };
 
   return (
     <AuthContext.Provider value={{ user, login, logout, loading }}>
