@@ -1,76 +1,112 @@
 <?php
 // ============================================================
-//  config.php - Updated for Render Deployment
+//  php/config.php  –  Database & App Configuration
 // ============================================================
 
-// ── Environment Variables Support (for Render) ─────────────
-define('DB_HOST',     getenv('DB_HOST') ?: 'localhost');
-define('DB_PORT',     getenv('DB_PORT') ?: '3306');
-define('DB_NAME',     getenv('DB_NAME') ?: 'barangay_connect');
-define('DB_USER',     getenv('DB_USER') ?: 'root');
-define('DB_PASS',     getenv('DB_PASS') ?: '');
-
-define('DB_CHARSET',  'utf8mb4');
+define('DB_HOST',    'sql112.infinityfree.com');
+define('DB_PORT',    '3306');
+define('DB_NAME',    'if0_41886132_barangay');
+define('DB_USER',    'if0_41886132');
+define('DB_PASS',    '2f5xhmFrHOIfeiN');
+define('DB_CHARSET', 'utf8mb4');
 
 define('APP_NAME',    'BarangayConnect');
+define('APP_URL',     'https://barangay-connect.ct.ws');
 define('APP_VERSION', '1.0.0');
 
-// ── PDO Connection for Aiven (with SSL) ─────────────────────
+define('SESSION_LIFETIME', 7200);
+
+// ── PDO singleton ──────────────────────────────────────────
 function getDB() {
-    $host = getenv('DB_HOST');
-    $port = getenv('DB_PORT');
-    $db   = getenv('DB_NAME');
-    $user = getenv('DB_USER');
-    $pass = getenv('DB_PASS');
-
-    $dsn = "mysql:host=$host;port=$port;dbname=$db;charset=utf8mb4";
-
-    return new PDO($dsn, $user, $pass, [
-        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => false,
-        PDO::MYSQL_ATTR_SSL_CA       => '/etc/ssl/certs/ca-certificates.crt',
-    ]);
+    static $pdo = null;
+    if ($pdo === null) {
+        $dsn = sprintf(
+            'mysql:host=%s;port=%s;dbname=%s;charset=%s',
+            DB_HOST, DB_PORT, DB_NAME, DB_CHARSET
+        );
+        $options = [
+            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES   => false,
+        ];
+        try {
+            $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+        } catch (PDOException $e) {
+            http_response_code(500);
+            die(json_encode(['success' => false, 'message' => 'Database connection failed: ' . $e->getMessage()]));
+        }
+    }
+    return $pdo;
 }
 
-// ── CORS for Production ───────────────────────────────────
-function setupCORS() {
-    if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-        http_response_code(204);
-        exit;
+// ── Session helpers ────────────────────────────────────────
+function startSession() {
+    if (session_status() === PHP_SESSION_NONE) {
+        ini_set('session.cookie_httponly', '1');
+        ini_set('session.use_strict_mode', '1');
+        session_set_cookie_params([
+            'lifetime' => SESSION_LIFETIME,
+            'path'     => '/',
+            'secure'   => true,
+            'httponly' => true,
+            'samesite' => 'None',
+        ]);
+        session_start();
     }
 }
 
-// Call this in every file
-setupCORS();
-
-// ── Helper Functions (only define if not already defined) ─────────────
-
-if (!function_exists('getJson')) {
-    function getJson(): array {
-        return json_decode(file_get_contents('php://input'), true) ?? [];
-    }
+function getSessionUser(): ?array {
+    startSession();
+    return $_SESSION['user'] ?? null;
 }
 
-if (!function_exists('clean')) {
-    function clean(string $val): string {
-        return htmlspecialchars(strip_tags(trim($val)), ENT_QUOTES, 'UTF-8');
+function requireAuth(string $role = ''): array {
+    $user = getSessionUser();
+    if (!$user) {
+        http_response_code(401);
+        die(json_encode(['success' => false, 'message' => 'Unauthorized. Please log in.']));
     }
+    if ($role && $user['role'] !== $role) {
+        http_response_code(403);
+        die(json_encode(['success' => false, 'message' => 'Forbidden. Insufficient permissions.']));
+    }
+    return $user;
 }
 
-if (!function_exists('jsonOk')) {
-    function jsonOk(array $data = [], string $message = 'Success'): void {
-        header('Content-Type: application/json');
-        echo json_encode(['success' => true, 'message' => $message] + $data);
-        exit;
-    }
+// ── JSON response helpers ──────────────────────────────────
+function jsonOk(array $data = [], string $message = 'Success') {
+    header('Content-Type: application/json');
+    echo json_encode(['success' => true, 'message' => $message] + $data);
+    exit;
 }
 
-if (!function_exists('jsonError')) {
-    function jsonError(string $message, int $code = 400): void {
-        http_response_code($code);
-        header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'message' => $message]);
-        exit;
+function jsonError(string $message, int $code = 400) {
+    http_response_code($code);
+    header('Content-Type: application/json');
+    echo json_encode(['success' => false, 'message' => $message]);
+    exit;
+}
+
+// ── Input sanitizer ────────────────────────────────────────
+function clean(string $val): string {
+    return htmlspecialchars(strip_tags(trim($val)), ENT_QUOTES, 'UTF-8');
+}
+
+function getJson(): array {
+    $raw = file_get_contents('php://input');
+    if ($raw) {
+        $data = json_decode($raw, true);
+        if ($data) return $data;
     }
+    return $_POST ?: [];
+}
+
+// ── Reference number generator ────────────────────────────
+function generateRefNo(): string {
+    $pdo  = getDB();
+    $year = date('Y');
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM requests WHERE YEAR(created_at) = ?");
+    $stmt->execute([$year]);
+    $count = (int) $stmt->fetchColumn();
+    return 'REQ-' . $year . '-' . str_pad($count + 1, 3, '0', STR_PAD_LEFT);
 }

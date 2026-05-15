@@ -1,43 +1,14 @@
 <?php
 // ============================================================
-//  [filename] 
+//  php/auth.php  –  Login / Register / Logout / Me
 // ============================================================
 
-// Include central config
 require_once __DIR__ . '/config.php';
 
-// Start session (if needed)
-if (session_status() === PHP_SESSION_NONE) {
-    ini_set('session.cookie_samesite', 'None');
-    ini_set('session.cookie_secure', '1');
-    ini_set('session.cookie_httponly', '1');
-    session_start();
-}
+header('Content-Type: application/json');
 
-// Call CORS setup from config
-setupCORS();
+startSession();
 
-// ── HELPERS ───────────────────────────────────────────────
-function getJson(): array {
-    return json_decode(file_get_contents('php://input'), true) ?? [];
-}
-
-function clean(string $val): string {
-    return htmlspecialchars(strip_tags(trim($val)), ENT_QUOTES, 'UTF-8');
-}
-
-function jsonOk(array $data = [], string $message = 'Success'): void {
-    echo json_encode(['success' => true, 'message' => $message] + $data);
-    exit;
-}
-
-function jsonError(string $message, int $code = 400): void {
-    http_response_code($code);
-    echo json_encode(['success' => false, 'message' => $message]);
-    exit;
-}
-
-// ── ROUTER ────────────────────────────────────────────────
 $action = $_GET['action'] ?? '';
 $data   = getJson();
 
@@ -55,32 +26,32 @@ function handleLogin(array $d): void {
     $pass  = $d['password'] ?? '';
 
     if (!$email || !$pass) jsonError('Email and password are required.');
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) jsonError('Invalid email address.');
 
     $pdo  = getDB();
     $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ? AND is_active = 1 LIMIT 1");
     $stmt->execute([$email]);
     $user = $stmt->fetch();
 
-    if (!$user || !password_verify($pass, $user['password_hash']))
+    if (!$user || !password_verify($pass, $user['password_hash'])) {
         jsonError('Invalid email or password.', 401);
-
-    // Generate a simple token and store in DB
-    $token = bin2hex(random_bytes(32));
-    $pdo->prepare("UPDATE users SET auth_token = ? WHERE id = ?")
-        ->execute([$token, $user['id']]);
+    }
 
     $userData = [
         'id'         => $user['id'],
         'email'      => $user['email'],
         'first_name' => $user['first_name'],
         'last_name'  => $user['last_name'],
+        'name'       => $user['first_name'] . ' ' . $user['last_name'],
         'role'       => $user['role'],
         'phone'      => $user['phone'],
         'purok'      => $user['purok'],
-        'token'      => $token,
+        'address'    => $user['address'],
     ];
 
-    jsonOk(['user' => $userData], 'Login successful.');
+    $_SESSION['user'] = $userData;
+    echo json_encode(['success' => true, 'message' => 'Login successful.', 'user' => $userData]);
+    exit;
 }
 
 // ── REGISTER ──────────────────────────────────────────────
@@ -122,44 +93,16 @@ function handleRegister(array $d): void {
 
 // ── LOGOUT ────────────────────────────────────────────────
 function handleLogout(): void {
-    $token = getBearerToken();
-    if ($token) {
-        $pdo = getDB();
-        $pdo->prepare("UPDATE users SET auth_token = NULL WHERE auth_token = ?")
-            ->execute([$token]);
-    }
-    jsonOk([], 'Logged out.');
+    $_SESSION = [];
+    session_destroy();
+    echo json_encode(['success' => true, 'message' => 'Logged out.']);
+    exit;
 }
 
 // ── ME ────────────────────────────────────────────────────
 function handleMe(): void {
-    $token = getBearerToken();
-    if (!$token) jsonError('Not authenticated.', 401);
-
-    $pdo  = getDB();
-    $stmt = $pdo->prepare("SELECT * FROM users WHERE auth_token = ? AND is_active = 1 LIMIT 1");
-    $stmt->execute([$token]);
-    $user = $stmt->fetch();
-
+    $user = $_SESSION['user'] ?? null;
     if (!$user) jsonError('Not authenticated.', 401);
-
-    jsonOk(['user' => [
-        'id'         => $user['id'],
-        'email'      => $user['email'],
-        'first_name' => $user['first_name'],
-        'last_name'  => $user['last_name'],
-        'role'       => $user['role'],
-        'phone'      => $user['phone'],
-        'purok'      => $user['purok'],
-        'token'      => $user['auth_token'],
-    ]]);
-}
-
-function getBearerToken(): ?string {
-    $headers = getallheaders();
-    $auth = $headers['Authorization'] ?? $headers['authorization'] ?? '';
-    if (str_starts_with($auth, 'Bearer ')) {
-        return substr($auth, 7);
-    }
-    return null;
+    echo json_encode(['success' => true, 'user' => $user]);
+    exit;
 }
