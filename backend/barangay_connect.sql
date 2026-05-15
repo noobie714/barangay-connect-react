@@ -1,10 +1,10 @@
 -- ============================================================
 --  BarangayConnect - MySQL Database Schema
---  Database: barangay_connect
+--  Database: if0_41886132_barangay
 --  Version:  1.1  (includes gcash_number, maya_number)
 -- ============================================================
 
-CREATE DATABASE IF NOT EXISTS barangay_connect
+CREATE DATABASE IF NOT EXISTS if0_41886132_barangay
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
 
